@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Track Bar and Drag Link Simulator</title>
+    <style>
+      /** canvas {
+        border: 0px solid black;
+      } **/
+      #lengthDisplay {
+        margin-top: 32px;
+      }
+      #angleDisplay {
+        margin-top: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section style="width: 100%; text-align: center">
+        <h1>Track Bar and Drag Link Simulator</h1>
+        <canvas id="simulationCanvas" width="800" height="600"></canvas>
+        <div id="lengthDisplay">
+          <label for="trackBarLengthInput">Track Bar Length:</label>
+          <input type="number" id="trackBarLengthInput" step="0.5" />
+          (inches)
+          <br />
+          <br />
+          <label for="dragLinkLengthInput">Drag Link Length:</label>
+          <input type="number" id="dragLinkLengthInput" step="0.5" />
+          (inches)
+        </div>
+        <div id="angleDisplay">
+          <label for="trackBarAngleInput">Track Bar Angle:</label>
+          <input type="number" id="trackBarAngleInput" step="0.5" />
+          (degrees)
+          <br />
+          <br />
+          <label for="dragLinkAngleInput">Drag Link Angle:</label>
+          <input type="number" id="dragLinkAngleInput" step="0.5" />
+          (degrees)
+        </div>
+        <div>
+          <p><strong>NOTE:</strong> 10 pixels is equal to 1 inch.</p>
+        </div>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById("simulationCanvas");
+      const ctx = canvas.getContext("2d");
+      const scale = 10; // 10 pixels represent 1 inch
+
+      // Initial points
+      let trackBarPoints = {
+        start: { x: 200, y: canvas.height / 2 },
+        end: { x: 600, y: canvas.height / 2 },
+      };
+      let dragLinkPoints = {
+        start: { x: 200, y: canvas.height / 2 + 50 },
+        end: { x: 600, y: canvas.height / 2 + 50 },
+      };
+
+      // Radius for the draggable points and size for the central square
+      const pointRadius = 5;
+      const squareSide = 10;
+
+      let draggingObj = null;
+      let dragOffsetX = 0;
+      let dragOffsetY = 0;
+
+      // Grid properties
+      const gridSpacing = 10;
+      const gridColor = "#CCCCCC";
+
+      function drawGrid() {
+        ctx.beginPath();
+        ctx.strokeStyle = gridColor;
+        ctx.lineWidth = 0.5;
+
+        // Draw vertical grid lines
+        for (let x = 0; x <= canvas.width; x += gridSpacing) {
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvas.height);
+        }
+
+        // Draw horizontal grid lines
+        for (let y = 0; y <= canvas.height; y += gridSpacing) {
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+        }
+
+        ctx.stroke();
+
+        // Draw the darker central X and Y axis lines
+        ctx.beginPath(); // Start a new path to apply new styles
+        const darkerGridColor = "#A9A9A9"; // Slightly darker gray color
+        ctx.strokeStyle = darkerGridColor;
+        ctx.lineWidth = 1; // Slightly thicker line for central axes
+
+        // Central vertical line
+        ctx.moveTo(canvas.width / 2, 0);
+        ctx.lineTo(canvas.width / 2, canvas.height);
+
+        // Central horizontal line
+        ctx.moveTo(0, canvas.height / 2);
+        ctx.lineTo(canvas.width, canvas.height / 2);
+
+        ctx.stroke();
+      }
+
+      function calculateAngleInDegrees(start, end) {
+        const deltaY = end.y - start.y;
+        const deltaX = end.x - start.x;
+        const angleRadians = Math.atan2(deltaY, deltaX);
+        return angleRadians * (180 / Math.PI); // Convert to degrees
+      }
+
+      function drawLineWithPointsAndSquare(linePoints, color) {
+        const { start, end } = linePoints;
+        // Set the line width for the draggable lines
+        ctx.lineWidth = 10;
+        // Draw the line
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 10;
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+
+        // Draw the circles at both ends
+        ctx.fillStyle = "black";
+        [start, end].forEach((point) => {
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, pointRadius, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Draw the central square
+        const centerX = (start.x + end.x) / 2;
+        const centerY = (start.y + end.y) / 2;
+        ctx.beginPath();
+        ctx.fillStyle = "grey"; // Color for the central square
+        ctx.fillRect(
+          centerX - squareSide / 2,
+          centerY - squareSide / 2,
+          squareSide,
+          squareSide
+        );
+
+        // Draw the angle
+        const angle = calculateAngleInDegrees(start, end).toFixed(2);
+        const textX = (start.x + end.x) / 2;
+        const textY = (start.y + end.y) / 2 - 10; // 10 pixels above the center square
+        ctx.fillStyle = "black"; // Text color
+        ctx.font = "12px Arial"; // Text font
+        ctx.fillText(angle + "°", textX, textY);
+      }
+
+      function drawArcForLine(linePoints, color) {
+        const { start, end } = linePoints;
+        const radius = Math.sqrt(
+          (end.x - start.x) ** 2 + (end.y - start.y) ** 2
+        );
+
+        // Calculate the center of the circle the arc is part of
+        // It should be 'radius' units to the right of the 'start' point
+        const centerX = start.x + radius;
+        const centerY = start.y;
+
+        // Begin path for arc
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2; // Thinner line for the arc
+
+        // Draw an arc that represents the path
+        // The arc will start from the bottom (Math.PI * 0.5), go up to the top (Math.PI * 1.5),
+        // then from the top down to the bottom again, creating a full circle
+        ctx.arc(centerX, centerY, radius, Math.PI * 0.5, Math.PI * 1.5, true);
+        ctx.arc(centerX, centerY, radius, Math.PI * 1.5, Math.PI * 0.5, true);
+
+        // Stroke the arc
+        ctx.stroke();
+      }
+
+      function calculateLengthInInches(start, end) {
+        const pixels = Math.sqrt(
+          Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
+        );
+        return pixels / scale; // Convert pixels to inches using the scale
+      }
+
+      function updateLineLengthFromInput(linePoints, inputId) {
+        const inputElement = document.getElementById(inputId);
+        const inches = parseFloat(inputElement.value);
+        const pixels = inches * scale;
+        const angle = Math.atan2(
+          linePoints.end.y - linePoints.start.y,
+          linePoints.end.x - linePoints.start.x
+        );
+        linePoints.end.x = linePoints.start.x + Math.cos(angle) * pixels;
+        linePoints.end.y = linePoints.start.y + Math.sin(angle) * pixels;
+      }
+
+      function setupLengthInputHandlers() {
+        const trackBarInput = document.getElementById("trackBarLengthInput");
+        const dragLinkInput = document.getElementById("dragLinkLengthInput");
+
+        trackBarInput.addEventListener("change", function () {
+          updateLineLengthFromInput(trackBarPoints, "trackBarLengthInput");
+          redraw();
+        });
+
+        dragLinkInput.addEventListener("change", function () {
+          updateLineLengthFromInput(dragLinkPoints, "dragLinkLengthInput");
+          redraw();
+        });
+      }
+
+      function displayLengths() {
+        const trackBarLengthInInches = calculateLengthInInches(
+          trackBarPoints.start,
+          trackBarPoints.end
+        );
+        const dragLinkLengthInInches = calculateLengthInInches(
+          dragLinkPoints.start,
+          dragLinkPoints.end
+        );
+        document.getElementById("trackBarLengthInput").value =
+          trackBarLengthInInches.toFixed(2);
+        document.getElementById("dragLinkLengthInput").value =
+          dragLinkLengthInInches.toFixed(2);
+      }
+
+      function setupAngleInputHandlers() {
+        const trackBarAngleInput =
+          document.getElementById("trackBarAngleInput");
+        const dragLinkAngleInput =
+          document.getElementById("dragLinkAngleInput");
+
+        trackBarAngleInput.addEventListener("change", function () {
+          updateLineAngle(trackBarPoints, parseFloat(this.value));
+          redraw();
+        });
+
+        dragLinkAngleInput.addEventListener("change", function () {
+          updateLineAngle(dragLinkPoints, parseFloat(this.value));
+          redraw();
+        });
+      }
+
+      function updateLineAngle(linePoints, angleDegrees) {
+        const length = calculateLengthInPixels(
+          linePoints.start,
+          linePoints.end
+        );
+        const angleRadians = angleDegrees * (Math.PI / 180);
+        linePoints.end.x = linePoints.start.x + Math.cos(angleRadians) * length;
+        linePoints.end.y = linePoints.start.y + Math.sin(angleRadians) * length;
+      }
+
+      function calculateLengthInPixels(start, end) {
+        return Math.sqrt(
+          Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
+        );
+      }
+
+      function displayAngles() {
+        const trackBarAngleDegrees = calculateAngleInDegrees(
+          trackBarPoints.start,
+          trackBarPoints.end
+        );
+        const dragLinkAngleDegrees = calculateAngleInDegrees(
+          dragLinkPoints.start,
+          dragLinkPoints.end
+        );
+        document.getElementById("trackBarAngleInput").value =
+          trackBarAngleDegrees.toFixed(2);
+        document.getElementById("dragLinkAngleInput").value =
+          dragLinkAngleDegrees.toFixed(2);
+      }
+
+      function redraw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGrid();
+        drawArcForLine(trackBarPoints, "#007bff");
+        drawArcForLine(dragLinkPoints, "#28a745");
+        drawLineWithPointsAndSquare(trackBarPoints, "#007bff");
+        drawLineWithPointsAndSquare(dragLinkPoints, "#28a745");
+        displayLengths(); // This will update the input boxes whenever the lines are redrawn
+      }
+
+      function isMouseNearPoint(mouseX, mouseY, point) {
+        return (
+          Math.sqrt((mouseX - point.x) ** 2 + (mouseY - point.y) ** 2) <
+          pointRadius * 2
+        );
+      }
+
+      function getLineCenter(linePoints) {
+        return {
+          x: (linePoints.start.x + linePoints.end.x) / 2,
+          y: (linePoints.start.y + linePoints.end.y) / 2,
+        };
+      }
+
+      function isMouseInSquare(mouseX, mouseY, squareCenter) {
+        return (
+          mouseX >= squareCenter.x - squareSide / 2 &&
+          mouseX <= squareCenter.x + squareSide / 2 &&
+          mouseY >= squareCenter.y - squareSide / 2 &&
+          mouseY <= squareCenter.y + squareSide / 2
+        );
+      }
+
+      canvas.addEventListener("mousedown", function (e) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Check for clicks on the endpoints first
+        [trackBarPoints, dragLinkPoints].forEach((line) => {
+          [line.start, line.end].forEach((point) => {
+            if (isMouseNearPoint(mouseX, mouseY, point)) {
+              draggingObj = point;
+              dragOffsetX = mouseX - point.x;
+              dragOffsetY = mouseY - point.y;
+            }
+          });
+        });
+
+        // If no endpoint was clicked, check for clicks on the central square
+        if (!draggingObj) {
+          [trackBarPoints, dragLinkPoints].forEach((line) => {
+            const center = getLineCenter(line);
+            if (isMouseInSquare(mouseX, mouseY, center)) {
+              draggingObj = line;
+              dragOffsetX = mouseX - center.x;
+              dragOffsetY = mouseY - center.y;
+            }
+          });
+        }
+      });
+
+      canvas.addEventListener("mousemove", function (e) {
+        if (draggingObj) {
+          const rect = canvas.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+
+          if ("start" in draggingObj) {
+            // Dragging a line
+            const dx = mouseX - dragOffsetX - getLineCenter(draggingObj).x;
+            const dy = mouseY - dragOffsetY - getLineCenter(draggingObj).y;
+            draggingObj.start.x += dx;
+            draggingObj.start.y += dy;
+            draggingObj.end.x += dx;
+            draggingObj.end.y += dy;
+            dragOffsetX = mouseX - getLineCenter(draggingObj).x;
+            dragOffsetY = mouseY - getLineCenter(draggingObj).y;
+          } else {
+            // Dragging an endpoint
+            draggingObj.x = mouseX - dragOffsetX;
+            draggingObj.y = mouseY - dragOffsetY;
+          }
+          redraw();
+          displayLengths();
+          displayAngles(); // Update angles after dragging
+        }
+      });
+
+      canvas.addEventListener("mouseup", function (e) {
+        draggingObj = null;
+        displayLengths();
+        displayAngles();
+      });
+
+      // Call this function at the end of your script to set up the input handlers
+      setupLengthInputHandlers();
+      setupLengthInputHandlers();
+      setupAngleInputHandlers();
+
+      redraw();
+      displayLengths();
+      displayAngles();
+    </script>
+  </body>
+</html>
