@@ -5,384 +5,440 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Track Bar and Drag Link Simulator</title>
     <style>
-      /** canvas {
-        border: 0px solid black;
-      } **/
-      #lengthDisplay {
-        margin-top: 32px;
+      :root {
+        --track: #1f6feb;   /* track bar (blue)  */
+        --drag: #2ea043;    /* drag link (green) */
+        --ink: #1b1f24;
+        --muted: #5b6570;
+        --line: #d7dde3;
+        --panel: #f6f8fa;
+        --bg: #ffffff;
       }
-      #angleDisplay {
-        margin-top: 16px;
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 48px; }
+      header { text-align: center; margin-bottom: 12px; }
+      h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: 0.2px; }
+      header p { margin: 0; color: var(--muted); font-size: 13px; }
+
+      .stage {
+        position: relative;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+      }
+      canvas { display: block; width: 100%; height: auto; touch-action: none; cursor: crosshair; }
+
+      .legend {
+        position: absolute; top: 10px; left: 10px;
+        background: rgba(255,255,255,0.9);
+        border: 1px solid var(--line); border-radius: 8px;
+        padding: 8px 10px; font-size: 12px; color: var(--muted);
+        display: flex; gap: 14px; align-items: center;
+      }
+      .legend b { color: var(--ink); font-weight: 600; }
+      .swatch { display: inline-block; width: 14px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+
+      .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+      @media (max-width: 720px) { .panels { grid-template-columns: 1fr; } }
+
+      .card { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--panel); }
+      .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin: 0 0 12px; }
+
+      .row { display: grid; grid-template-columns: 130px 1fr auto; align-items: center; gap: 8px; margin-bottom: 10px; }
+      .row:last-child { margin-bottom: 0; }
+      .row label { color: var(--muted); }
+      .row input[type="number"] {
+        width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+        font: inherit; text-align: right; background: #fff;
+      }
+      .row .unit { color: var(--muted); font-size: 13px; min-width: 46px; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+
+      .readout { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: baseline; }
+      .readout .k { color: var(--muted); }
+      .readout .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+      .mismatch { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+      .mismatch .big { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .verdict { font-size: 13px; margin-top: 2px; }
+      .good { color: var(--drag); } .warn { color: #b7791f; } .bad { color: #cf222e; }
+
+      .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+      .controls .grow { flex: 1; }
+      button {
+        font: inherit; padding: 7px 12px; border: 1px solid var(--line); border-radius: 7px;
+        background: #fff; color: var(--ink); cursor: pointer;
+      }
+      button:hover { background: #f0f3f6; }
+      .toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+
+      footer { margin-top: 22px; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+      footer b { color: var(--ink); }
     </style>
   </head>
   <body>
-    <main>
-      <section style="width: 100%; text-align: center">
-        <h1>Track Bar and Drag Link Simulator</h1>
-        <canvas id="simulationCanvas" width="800" height="600"></canvas>
-        <div id="lengthDisplay">
-          <label for="trackBarLengthInput">Track Bar Length:</label>
-          <input type="number" id="trackBarLengthInput" step="0.5" />
-          (inches)
-          <br />
-          <br />
-          <label for="dragLinkLengthInput">Drag Link Length:</label>
-          <input type="number" id="dragLinkLengthInput" step="0.5" />
-          (inches)
+    <div class="wrap">
+      <header>
+        <h1>Track Bar &amp; Drag Link Simulator</h1>
+        <p>Drag an endpoint or the middle handle of either link — or type exact values below. Each grid square = 1&nbsp;inch.</p>
+      </header>
+
+      <div class="stage">
+        <canvas id="cv"></canvas>
+        <div class="legend">
+          <span><span class="swatch" style="background:var(--track)"></span><b>Track bar</b></span>
+          <span><span class="swatch" style="background:var(--drag)"></span><b>Drag link</b></span>
+          <span>faint curve = arc of travel</span>
         </div>
-        <div id="angleDisplay">
-          <label for="trackBarAngleInput">Track Bar Angle:</label>
-          <input type="number" id="trackBarAngleInput" step="0.5" />
-          (degrees)
-          <br />
-          <br />
-          <label for="dragLinkAngleInput">Drag Link Angle:</label>
-          <input type="number" id="dragLinkAngleInput" step="0.5" />
-          (degrees)
+      </div>
+
+      <div class="panels">
+        <div class="card">
+          <h2>Geometry</h2>
+          <div class="row">
+            <label><span class="dot" style="background:var(--track)"></span>Track bar length</label>
+            <input type="number" id="tbLen" step="0.5" />
+            <span class="unit">inches</span>
+          </div>
+          <div class="row">
+            <label>Track bar angle</label>
+            <input type="number" id="tbAng" step="0.5" />
+            <span class="unit">degrees</span>
+          </div>
+          <div class="row">
+            <label><span class="dot" style="background:var(--drag)"></span>Drag link length</label>
+            <input type="number" id="dlLen" step="0.5" />
+            <span class="unit">inches</span>
+          </div>
+          <div class="row">
+            <label>Drag link angle</label>
+            <input type="number" id="dlAng" step="0.5" />
+            <span class="unit">degrees</span>
+          </div>
+          <div class="controls">
+            <label class="toggle"><input type="checkbox" id="snap" /> Snap to 1&quot; grid</label>
+            <span class="grow"></span>
+            <button id="reset">Reset</button>
+          </div>
         </div>
-        <div>
-          <p><strong>NOTE:</strong> 10 pixels is equal to 1 inch.</p>
+
+        <div class="card">
+          <h2>Suspension travel analysis</h2>
+          <div class="controls" style="margin:0 0 12px">
+            <label class="toggle">Wheel travel&nbsp; ±
+              <input type="number" id="travel" step="0.5" min="0" style="width:64px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;text-align:right" />
+              &nbsp;in
+            </label>
+          </div>
+          <div class="readout">
+            <span class="k"><span class="dot" style="background:var(--track)"></span>Track bar — lateral sweep</span>
+            <span class="v" id="tbSweep">—</span>
+            <span class="k"><span class="dot" style="background:var(--drag)"></span>Drag link — lateral sweep</span>
+            <span class="v" id="dlSweep">—</span>
+          </div>
+          <div class="mismatch">
+            <div class="k">Bump-steer mismatch <span style="font-weight:400">(lateral sweep difference)</span></div>
+            <div class="big" id="mismatch">—</div>
+            <div class="verdict" id="verdict"></div>
+          </div>
         </div>
-      </section>
-    </main>
+      </div>
+
+      <footer>
+        <p><b>How to read it.</b> Each link pivots on its <i>frame-side</i> mounting point (the fixed end).
+        As the suspension cycles up and down, the <i>axle-side</i> end swings along the faint arc of travel.
+        The arcs now follow each link's real angle — tilt a bar and its arc tilts with it.</p>
+        <p><b>Why the arcs matter.</b> If the track bar and drag link sweep the axle sideways by different
+        amounts through the same wheel travel, the axle gets steered by bumps (<b>bump steer</b>). Match their
+        lateral sweep — same length and angle relationship — to minimize it. The mismatch figure above is that
+        difference over your chosen travel range.</p>
+      </footer>
+    </div>
+
     <script>
-      const canvas = document.getElementById("simulationCanvas");
-      const ctx = canvas.getContext("2d");
-      const scale = 10; // 10 pixels represent 1 inch
+      "use strict";
+      const cv = document.getElementById("cv");
+      const ctx = cv.getContext("2d");
 
-      // Initial points
-      let trackBarPoints = {
-        start: { x: 200, y: canvas.height / 2 },
-        end: { x: 600, y: canvas.height / 2 },
-      };
-      let dragLinkPoints = {
-        start: { x: 200, y: canvas.height / 2 + 50 },
-        end: { x: 600, y: canvas.height / 2 + 50 },
-      };
+      const PPI = 14;            // pixels per inch (each grid square = 1")
+      const VIEW_W = 1040;       // logical drawing width  (px)
+      const VIEW_H = 560;        // logical drawing height (px)
+      let W = VIEW_W, H = VIEW_H, cx = W / 2, cy = H / 2;
 
-      // Radius for the draggable points and size for the central square
-      const pointRadius = 5;
-      const squareSide = 10;
+      // Model. Endpoints in logical px. start = axle side (moving), end = frame side (fixed pivot).
+      const DEFAULTS = () => ({
+        track: { start: { x: cx - 15 * PPI, y: cy - 4 * PPI }, end: { x: cx - 15 * PPI + 40 * PPI, y: cy - 4 * PPI } },
+        drag:  { start: { x: cx - 15 * PPI, y: cy + 4 * PPI }, end: { x: cx - 15 * PPI + 41 * PPI, y: cy + 4 * PPI } },
+      });
+      let bars = DEFAULTS();
+      let travelIn = 4;          // ± wheel travel, inches
 
-      let draggingObj = null;
-      let dragOffsetX = 0;
-      let dragOffsetY = 0;
+      const el = (id) => document.getElementById(id);
+      const dist = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+      const angleDeg = (a, b) => Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
 
-      // Grid properties
-      const gridSpacing = 10;
-      const gridColor = "#CCCCCC";
+      /* ---------- high-DPI canvas ---------- */
+      function resize() {
+        const cssW = cv.clientWidth || VIEW_W;
+        const dpr = window.devicePixelRatio || 1;
+        W = cssW;
+        H = Math.round(cssW * (VIEW_H / VIEW_W));
+        cx = W / 2; cy = H / 2;
+        cv.style.height = H + "px";
+        cv.width = Math.round(W * dpr);
+        cv.height = Math.round(H * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        redraw();
+      }
 
+      /* ---------- grid: 1" squares, 5" majors, inch labels ---------- */
       function drawGrid() {
+        ctx.clearRect(0, 0, W, H);
+
+        // minor gridlines (every 1 inch)
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "#eef1f4";
         ctx.beginPath();
-        ctx.strokeStyle = gridColor;
-        ctx.lineWidth = 0.5;
-
-        // Draw vertical grid lines
-        for (let x = 0; x <= canvas.width; x += gridSpacing) {
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, canvas.height);
-        }
-
-        // Draw horizontal grid lines
-        for (let y = 0; y <= canvas.height; y += gridSpacing) {
-          ctx.moveTo(0, y);
-          ctx.lineTo(canvas.width, y);
-        }
-
+        for (let x = cx % PPI; x <= W; x += PPI) { ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H); }
+        for (let y = cy % PPI; y <= H; y += PPI) { ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); }
         ctx.stroke();
 
-        // Draw the darker central X and Y axis lines
-        ctx.beginPath(); // Start a new path to apply new styles
-        const darkerGridColor = "#A9A9A9"; // Slightly darker gray color
-        ctx.strokeStyle = darkerGridColor;
-        ctx.lineWidth = 1; // Slightly thicker line for central axes
-
-        // Central vertical line
-        ctx.moveTo(canvas.width / 2, 0);
-        ctx.lineTo(canvas.width / 2, canvas.height);
-
-        // Central horizontal line
-        ctx.moveTo(0, canvas.height / 2);
-        ctx.lineTo(canvas.width, canvas.height / 2);
-
+        // major gridlines (every 5 inches)
+        ctx.strokeStyle = "#dfe4ea";
+        ctx.beginPath();
+        for (let i = -Math.ceil(cx / (5 * PPI)); i <= Math.ceil((W - cx) / (5 * PPI)); i++) {
+          const x = cx + i * 5 * PPI; ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H);
+        }
+        for (let i = -Math.ceil(cy / (5 * PPI)); i <= Math.ceil((H - cy) / (5 * PPI)); i++) {
+          const y = cy + i * 5 * PPI; ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5);
+        }
         ctx.stroke();
+
+        // center axes
+        ctx.strokeStyle = "#b6bec7";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx + .5, 0); ctx.lineTo(cx + .5, H);
+        ctx.moveTo(0, cy + .5); ctx.lineTo(W, cy + .5);
+        ctx.stroke();
+
+        // inch labels along the axes (every 5")
+        ctx.fillStyle = "#9aa4ad";
+        ctx.font = "11px -apple-system, Arial, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "top";
+        for (let i = -Math.floor(cx / (5 * PPI)); i <= Math.floor((W - cx) / (5 * PPI)); i++) {
+          if (i === 0) continue;
+          ctx.fillText(i * 5 + '"', cx + i * 5 * PPI, cy + 4);
+        }
+        ctx.textAlign = "left"; ctx.textBaseline = "middle";
+        for (let i = -Math.floor(cy / (5 * PPI)); i <= Math.floor((H - cy) / (5 * PPI)); i++) {
+          if (i === 0) continue;
+          ctx.fillText((-i * 5) + '"', cx + 4, cy + i * 5 * PPI);
+        }
       }
 
-      function calculateAngleInDegrees(start, end) {
-        const deltaY = end.y - start.y;
-        const deltaX = end.x - start.x;
-        const angleRadians = Math.atan2(deltaY, deltaX);
-        return angleRadians * (180 / Math.PI); // Convert to degrees
+      /* ---------- arc of travel: centered on the FIXED pivot, rotates with the bar ---------- */
+      // Returns the axle-end x at a given y as it rides the travel circle (pivot = fixed end).
+      function railX(bar, y) {
+        const { start, end } = bar;
+        const L = dist(start, end);
+        const dy = y - end.y;
+        if (Math.abs(dy) > L) return null;
+        const dx = Math.sqrt(L * L - dy * dy);
+        // choose the branch the axle end is currently on (usually left of pivot)
+        return start.x <= end.x ? end.x - dx : end.x + dx;
       }
 
-      function drawLineWithPointsAndSquare(linePoints, color) {
-        const { start, end } = linePoints;
-        // Set the line width for the draggable lines
-        ctx.lineWidth = 10;
-        // Draw the line
+      function drawArc(bar, color) {
+        const { start, end } = bar;
+        const L = dist(start, end);
+        const travelPx = travelIn * PPI;
+
+        // faint full travel circle centered on the fixed frame pivot
+        ctx.beginPath();
+        ctx.strokeStyle = color + "33";
+        ctx.lineWidth = 1.5;
+        ctx.arc(end.x, end.y, L, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // highlighted swept segment over ± wheel travel
         ctx.beginPath();
         ctx.strokeStyle = color;
-        ctx.lineWidth = 10;
-        ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x, end.y);
-        ctx.stroke();
-
-        // Draw the circles at both ends
-        ctx.fillStyle = "black";
-        [start, end].forEach((point) => {
-          ctx.beginPath();
-          ctx.arc(point.x, point.y, pointRadius, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        // Draw the central square
-        const centerX = (start.x + end.x) / 2;
-        const centerY = (start.y + end.y) / 2;
-        ctx.beginPath();
-        ctx.fillStyle = "grey"; // Color for the central square
-        ctx.fillRect(
-          centerX - squareSide / 2,
-          centerY - squareSide / 2,
-          squareSide,
-          squareSide
-        );
-
-        // Draw the angle
-        const angle = calculateAngleInDegrees(start, end).toFixed(2);
-        const textX = (start.x + end.x) / 2;
-        const textY = (start.y + end.y) / 2 - 10; // 10 pixels above the center square
-        ctx.fillStyle = "black"; // Text color
-        ctx.font = "12px Arial"; // Text font
-        ctx.fillText(angle + "°", textX, textY);
-      }
-
-      function drawArcForLine(linePoints, color) {
-        const { start, end } = linePoints;
-        const radius = Math.sqrt(
-          (end.x - start.x) ** 2 + (end.y - start.y) ** 2
-        );
-
-        // Calculate the center of the circle the arc is part of
-        // It should be 'radius' units to the right of the 'start' point
-        const centerX = start.x + radius;
-        const centerY = start.y;
-
-        // Begin path for arc
-        ctx.beginPath();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2; // Thinner line for the arc
-
-        // Draw an arc that represents the path
-        // The arc will start from the bottom (Math.PI * 0.5), go up to the top (Math.PI * 1.5),
-        // then from the top down to the bottom again, creating a full circle
-        ctx.arc(centerX, centerY, radius, Math.PI * 0.5, Math.PI * 1.5, true);
-        ctx.arc(centerX, centerY, radius, Math.PI * 1.5, Math.PI * 0.5, true);
-
-        // Stroke the arc
-        ctx.stroke();
-      }
-
-      function calculateLengthInInches(start, end) {
-        const pixels = Math.sqrt(
-          Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
-        );
-        return pixels / scale; // Convert pixels to inches using the scale
-      }
-
-      function updateLineLengthFromInput(linePoints, inputId) {
-        const inputElement = document.getElementById(inputId);
-        const inches = parseFloat(inputElement.value);
-        const pixels = inches * scale;
-        const angle = Math.atan2(
-          linePoints.end.y - linePoints.start.y,
-          linePoints.end.x - linePoints.start.x
-        );
-        linePoints.end.x = linePoints.start.x + Math.cos(angle) * pixels;
-        linePoints.end.y = linePoints.start.y + Math.sin(angle) * pixels;
-      }
-
-      function setupLengthInputHandlers() {
-        const trackBarInput = document.getElementById("trackBarLengthInput");
-        const dragLinkInput = document.getElementById("dragLinkLengthInput");
-
-        trackBarInput.addEventListener("change", function () {
-          updateLineLengthFromInput(trackBarPoints, "trackBarLengthInput");
-          redraw();
-        });
-
-        dragLinkInput.addEventListener("change", function () {
-          updateLineLengthFromInput(dragLinkPoints, "dragLinkLengthInput");
-          redraw();
-        });
-      }
-
-      function displayLengths() {
-        const trackBarLengthInInches = calculateLengthInInches(
-          trackBarPoints.start,
-          trackBarPoints.end
-        );
-        const dragLinkLengthInInches = calculateLengthInInches(
-          dragLinkPoints.start,
-          dragLinkPoints.end
-        );
-        document.getElementById("trackBarLengthInput").value =
-          trackBarLengthInInches.toFixed(2);
-        document.getElementById("dragLinkLengthInput").value =
-          dragLinkLengthInInches.toFixed(2);
-      }
-
-      function setupAngleInputHandlers() {
-        const trackBarAngleInput =
-          document.getElementById("trackBarAngleInput");
-        const dragLinkAngleInput =
-          document.getElementById("dragLinkAngleInput");
-
-        trackBarAngleInput.addEventListener("change", function () {
-          updateLineAngle(trackBarPoints, parseFloat(this.value));
-          redraw();
-        });
-
-        dragLinkAngleInput.addEventListener("change", function () {
-          updateLineAngle(dragLinkPoints, parseFloat(this.value));
-          redraw();
-        });
-      }
-
-      function updateLineAngle(linePoints, angleDegrees) {
-        const length = calculateLengthInPixels(
-          linePoints.start,
-          linePoints.end
-        );
-        const angleRadians = angleDegrees * (Math.PI / 180);
-        linePoints.end.x = linePoints.start.x + Math.cos(angleRadians) * length;
-        linePoints.end.y = linePoints.start.y + Math.sin(angleRadians) * length;
-      }
-
-      function calculateLengthInPixels(start, end) {
-        return Math.sqrt(
-          Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
-        );
-      }
-
-      function displayAngles() {
-        const trackBarAngleDegrees = calculateAngleInDegrees(
-          trackBarPoints.start,
-          trackBarPoints.end
-        );
-        const dragLinkAngleDegrees = calculateAngleInDegrees(
-          dragLinkPoints.start,
-          dragLinkPoints.end
-        );
-        document.getElementById("trackBarAngleInput").value =
-          trackBarAngleDegrees.toFixed(2);
-        document.getElementById("dragLinkAngleInput").value =
-          dragLinkAngleDegrees.toFixed(2);
-      }
-
-      function redraw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawGrid();
-        drawArcForLine(trackBarPoints, "#007bff");
-        drawArcForLine(dragLinkPoints, "#28a745");
-        drawLineWithPointsAndSquare(trackBarPoints, "#007bff");
-        drawLineWithPointsAndSquare(dragLinkPoints, "#28a745");
-        displayLengths(); // This will update the input boxes whenever the lines are redrawn
-      }
-
-      function isMouseNearPoint(mouseX, mouseY, point) {
-        return (
-          Math.sqrt((mouseX - point.x) ** 2 + (mouseY - point.y) ** 2) <
-          pointRadius * 2
-        );
-      }
-
-      function getLineCenter(linePoints) {
-        return {
-          x: (linePoints.start.x + linePoints.end.x) / 2,
-          y: (linePoints.start.y + linePoints.end.y) / 2,
-        };
-      }
-
-      function isMouseInSquare(mouseX, mouseY, squareCenter) {
-        return (
-          mouseX >= squareCenter.x - squareSide / 2 &&
-          mouseX <= squareCenter.x + squareSide / 2 &&
-          mouseY >= squareCenter.y - squareSide / 2 &&
-          mouseY <= squareCenter.y + squareSide / 2
-        );
-      }
-
-      canvas.addEventListener("mousedown", function (e) {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        // Check for clicks on the endpoints first
-        [trackBarPoints, dragLinkPoints].forEach((line) => {
-          [line.start, line.end].forEach((point) => {
-            if (isMouseNearPoint(mouseX, mouseY, point)) {
-              draggingObj = point;
-              dragOffsetX = mouseX - point.x;
-              dragOffsetY = mouseY - point.y;
-            }
-          });
-        });
-
-        // If no endpoint was clicked, check for clicks on the central square
-        if (!draggingObj) {
-          [trackBarPoints, dragLinkPoints].forEach((line) => {
-            const center = getLineCenter(line);
-            if (isMouseInSquare(mouseX, mouseY, center)) {
-              draggingObj = line;
-              dragOffsetX = mouseX - center.x;
-              dragOffsetY = mouseY - center.y;
-            }
-          });
+        ctx.lineWidth = 3;
+        let first = true;
+        for (let k = -1; k <= 1.0001; k += 1 / 32) {
+          const y = start.y + k * travelPx;
+          const x = railX(bar, y);
+          if (x === null) continue;
+          if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
         }
-      });
+        ctx.stroke();
 
-      canvas.addEventListener("mousemove", function (e) {
-        if (draggingObj) {
-          const rect = canvas.getBoundingClientRect();
-          const mouseX = e.clientX - rect.left;
-          const mouseY = e.clientY - rect.top;
+        // travel-extent ticks (top & bottom of swept segment)
+        [start.y - travelPx, start.y + travelPx].forEach((y) => {
+          const x = railX(bar, y);
+          if (x === null) return;
+          ctx.beginPath(); ctx.fillStyle = color;
+          ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+        });
+      }
 
-          if ("start" in draggingObj) {
-            // Dragging a line
-            const dx = mouseX - dragOffsetX - getLineCenter(draggingObj).x;
-            const dy = mouseY - dragOffsetY - getLineCenter(draggingObj).y;
-            draggingObj.start.x += dx;
-            draggingObj.start.y += dy;
-            draggingObj.end.x += dx;
-            draggingObj.end.y += dy;
-            dragOffsetX = mouseX - getLineCenter(draggingObj).x;
-            dragOffsetY = mouseY - getLineCenter(draggingObj).y;
-          } else {
-            // Dragging an endpoint
-            draggingObj.x = mouseX - dragOffsetX;
-            draggingObj.y = mouseY - dragOffsetY;
+      /* ---------- the link itself ---------- */
+      function drawBar(bar, color, label) {
+        const { start, end } = bar;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.strokeStyle = color; ctx.lineWidth = 9;
+        ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+        ctx.lineCap = "butt";
+
+        // endpoints: hollow = fixed frame pivot, solid = moving axle end
+        ctx.fillStyle = "#fff"; ctx.strokeStyle = "#333"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(end.x, end.y, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#222";
+        ctx.beginPath(); ctx.arc(start.x, start.y, 5.5, 0, Math.PI * 2); ctx.fill();
+
+        // middle drag handle
+        const mx = (start.x + end.x) / 2, my = (start.y + end.y) / 2;
+        ctx.fillStyle = "#fff"; ctx.strokeStyle = color; ctx.lineWidth = 2;
+        ctx.fillRect(mx - 5, my - 5, 10, 10); ctx.strokeRect(mx - 5, my - 5, 10, 10);
+
+        // angle label
+        const a = angleDeg(start, end).toFixed(1);
+        ctx.fillStyle = "#1b1f24"; ctx.font = "bold 12px -apple-system, Arial, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+        ctx.fillText(`${label}  ${a}°`, mx, my - 9);
+      }
+
+      /* ---------- analysis ---------- */
+      function lateralSweep(bar) {
+        const travelPx = travelIn * PPI;
+        let lo = Infinity, hi = -Infinity;
+        for (let k = -1; k <= 1.0001; k += 1 / 64) {
+          const x = railX(bar, bar.start.y + k * travelPx);
+          if (x === null) continue;
+          lo = Math.min(lo, x); hi = Math.max(hi, x);
+        }
+        return lo === Infinity ? 0 : (hi - lo) / PPI; // inches
+      }
+
+      function updateAnalysis() {
+        const tb = lateralSweep(bars.track);
+        const dl = lateralSweep(bars.drag);
+        el("tbSweep").textContent = tb.toFixed(3) + '"';
+        el("dlSweep").textContent = dl.toFixed(3) + '"';
+        const mm = Math.abs(tb - dl);
+        el("mismatch").textContent = mm.toFixed(3) + '"';
+        const v = el("verdict");
+        if (mm < 0.05) { v.textContent = "Excellent — arcs track closely, minimal bump steer."; v.className = "verdict good"; }
+        else if (mm < 0.15) { v.textContent = "Good — small amount of bump steer."; v.className = "verdict warn"; }
+        else { v.textContent = "Noticeable mismatch — expect bump steer. Try matching length & angle."; v.className = "verdict bad"; }
+      }
+
+      /* ---------- inputs ---------- */
+      function syncInputs() {
+        el("tbLen").value = (dist(bars.track.start, bars.track.end) / PPI).toFixed(2);
+        el("dlLen").value = (dist(bars.drag.start, bars.drag.end) / PPI).toFixed(2);
+        el("tbAng").value = angleDeg(bars.track.start, bars.track.end).toFixed(2);
+        el("dlAng").value = angleDeg(bars.drag.start, bars.drag.end).toFixed(2);
+        el("travel").value = travelIn;
+      }
+
+      function setLength(bar, inches) {
+        const L = Math.max(0.1, inches) * PPI;
+        const a = Math.atan2(bar.end.y - bar.start.y, bar.end.x - bar.start.x);
+        bar.end.x = bar.start.x + Math.cos(a) * L;
+        bar.end.y = bar.start.y + Math.sin(a) * L;
+      }
+      function setAngle(bar, deg) {
+        const L = dist(bar.start, bar.end);
+        const a = deg * Math.PI / 180;
+        bar.end.x = bar.start.x + Math.cos(a) * L;
+        bar.end.y = bar.start.y + Math.sin(a) * L;
+      }
+
+      el("tbLen").addEventListener("change", () => { setLength(bars.track, parseFloat(el("tbLen").value)); redraw(); });
+      el("dlLen").addEventListener("change", () => { setLength(bars.drag, parseFloat(el("dlLen").value)); redraw(); });
+      el("tbAng").addEventListener("change", () => { setAngle(bars.track, parseFloat(el("tbAng").value)); redraw(); });
+      el("dlAng").addEventListener("change", () => { setAngle(bars.drag, parseFloat(el("dlAng").value)); redraw(); });
+      el("travel").addEventListener("change", () => { travelIn = Math.max(0, parseFloat(el("travel").value) || 0); redraw(); });
+      el("reset").addEventListener("click", () => { bars = DEFAULTS(); travelIn = 4; redraw(); });
+
+      /* ---------- dragging (mouse + touch) ---------- */
+      let drag = null; // {ref, kind:'point'|'line', ox, oy}
+      const near = (p, x, y, r) => Math.hypot(p.x - x, p.y - y) < r;
+
+      function pointerPos(e) {
+        const r = cv.getBoundingClientRect();
+        const t = e.touches ? e.touches[0] : e;
+        return { x: (t.clientX - r.left) * (W / r.width), y: (t.clientY - r.top) * (H / r.height) };
+      }
+      function maybeSnap(p) {
+        if (!el("snap").checked) return;
+        p.x = cx + Math.round((p.x - cx) / PPI) * PPI;
+        p.y = cy + Math.round((p.y - cy) / PPI) * PPI;
+      }
+
+      function onDown(e) {
+        const { x, y } = pointerPos(e);
+        for (const key of ["track", "drag"]) {
+          const b = bars[key];
+          for (const end of ["start", "end"]) {
+            if (near(b[end], x, y, 11)) { drag = { pt: b[end] }; e.preventDefault(); return; }
           }
-          redraw();
-          displayLengths();
-          displayAngles(); // Update angles after dragging
         }
-      });
+        for (const key of ["track", "drag"]) {
+          const b = bars[key];
+          const mx = (b.start.x + b.end.x) / 2, my = (b.start.y + b.end.y) / 2;
+          if (Math.abs(x - mx) < 8 && Math.abs(y - my) < 8) {
+            drag = { line: b, ox: x - mx, oy: y - my }; e.preventDefault(); return;
+          }
+        }
+      }
+      function onMove(e) {
+        if (!drag) return;
+        e.preventDefault();
+        const p = pointerPos(e);
+        if (drag.pt) { maybeSnap(p); drag.pt.x = p.x; drag.pt.y = p.y; }
+        else {
+          const b = drag.line;
+          const mx = (b.start.x + b.end.x) / 2, my = (b.start.y + b.end.y) / 2;
+          let nx = p.x - drag.ox, ny = p.y - drag.oy;
+          const c = { x: nx, y: ny }; maybeSnap(c);
+          const dx = c.x - mx, dy = c.y - my;
+          b.start.x += dx; b.start.y += dy; b.end.x += dx; b.end.y += dy;
+        }
+        redraw();
+      }
+      function onUp() { drag = null; }
 
-      canvas.addEventListener("mouseup", function (e) {
-        draggingObj = null;
-        displayLengths();
-        displayAngles();
-      });
+      cv.addEventListener("mousedown", onDown);
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+      cv.addEventListener("touchstart", onDown, { passive: false });
+      cv.addEventListener("touchmove", onMove, { passive: false });
+      cv.addEventListener("touchend", onUp);
 
-      // Call this function at the end of your script to set up the input handlers
-      setupLengthInputHandlers();
-      setupLengthInputHandlers();
-      setupAngleInputHandlers();
+      /* ---------- main ---------- */
+      function redraw() {
+        drawGrid();
+        drawArc(bars.track, "#1f6feb");
+        drawArc(bars.drag, "#2ea043");
+        drawBar(bars.track, "#1f6feb", "Track");
+        drawBar(bars.drag, "#2ea043", "Drag");
+        syncInputs();
+        updateAnalysis();
+      }
 
-      redraw();
-      displayLengths();
-      displayAngles();
+      window.addEventListener("resize", resize);
+      resize();
     </script>
   </body>
 </html>
