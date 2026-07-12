@@ -86,7 +86,7 @@
     <div class="wrap">
       <header>
         <h1>Track Bar &amp; Drag Link Simulator</h1>
-        <p>Drag an endpoint or the middle handle of either link — or type exact values below. Each grid square = 1&nbsp;inch.</p>
+        <p>Drag an endpoint or the middle handle of either link, or type exact values below. Each grid square = 1&nbsp;inch.</p>
       </header>
 
       <div class="stage">
@@ -137,27 +137,27 @@
             </label>
           </div>
           <div class="readout">
-            <span class="k"><span class="dot" style="background:var(--track)"></span>Track bar — lateral sweep</span>
-            <span class="v" id="tbSweep">—</span>
-            <span class="k"><span class="dot" style="background:var(--drag)"></span>Drag link — lateral sweep</span>
-            <span class="v" id="dlSweep">—</span>
+            <span class="k"><span class="dot" style="background:var(--track)"></span>Track bar sideways movement</span>
+            <span class="v" id="tbSweep">-</span>
+            <span class="k"><span class="dot" style="background:var(--drag)"></span>Drag link sideways movement</span>
+            <span class="v" id="dlSweep">-</span>
           </div>
           <div class="mismatch">
-            <div class="k">Bump-steer mismatch <span style="font-weight:400">(lateral sweep difference)</span></div>
-            <div class="big" id="mismatch">—</div>
+            <div class="k">Bump-steer mismatch <span style="font-weight:400">(how far apart the two ends move through travel)</span></div>
+            <div class="big" id="mismatch">-</div>
             <div class="verdict" id="verdict"></div>
           </div>
         </div>
       </div>
 
       <footer>
-        <p><b>How to read it.</b> Each link pivots on its <i>frame-side</i> mounting point (the fixed end).
-        As the suspension cycles up and down, the <i>axle-side</i> end swings along the faint arc of travel.
-        The arcs now follow each link's real angle — tilt a bar and its arc tilts with it.</p>
-        <p><b>Why the arcs matter.</b> If the track bar and drag link sweep the axle sideways by different
-        amounts through the same wheel travel, the axle gets steered by bumps (<b>bump steer</b>). Match their
-        lateral sweep — same length and angle relationship — to minimize it. The mismatch figure above is that
-        difference over your chosen travel range.</p>
+        <p><b>How to read it.</b> Each link pivots on its <i>frame-side</i> mounting point (the fixed hollow end).
+        As the suspension cycles up and down, the <i>axle-side</i> end (solid dot) swings along the faint arc of travel.
+        The arcs follow each link's real angle, so tilt a bar and its arc tilts with it.</p>
+        <p><b>Why it matters.</b> Bump steer comes from the track bar and drag link moving the axle sideways
+        by different amounts through the same wheel travel. The number above is that gap at its worst point over
+        your travel range, so lower is better and matching length and angle drives it toward zero. Two arcs simply
+        sitting apart on the grid is not itself bump steer; what counts is whether they move together.</p>
       </footer>
     </div>
 
@@ -317,29 +317,40 @@
         ctx.fillText(`${label}  ${a}°`, mx, my - 9);
       }
 
-      /* ---------- analysis ---------- */
-      function lateralSweep(bar) {
-        const travelPx = travelIn * PPI;
-        let lo = Infinity, hi = -Infinity;
-        for (let k = -1; k <= 1.0001; k += 1 / 64) {
-          const x = railX(bar, bar.start.y + k * travelPx);
-          if (x === null) continue;
-          lo = Math.min(lo, x); hi = Math.max(hi, x);
+      /* ---------- analysis ----------
+         Bump steer is not the gap between the two arcs, and not each arc's total width.
+         It is how differently the two axle ends move sideways for the SAME wheel travel.
+         So we sample each end's sideways shift from ride height across the travel band,
+         and report the largest point-by-point difference between the two. */
+      function lateralShift(bar) {
+        // sideways (x) displacement of the axle end from ride height, sampled across +/- travel
+        const T = travelIn * PPI, N = 80, out = [];
+        const x0 = bar.start.x;
+        for (let i = 0; i <= N; i++) {
+          const delta = -T + (2 * T) * (i / N);
+          const x = railX(bar, bar.start.y + delta);
+          out.push(x === null ? null : x - x0);
         }
-        return lo === Infinity ? 0 : (hi - lo) / PPI; // inches
+        return out;
       }
 
       function updateAnalysis() {
-        const tb = lateralSweep(bars.track);
-        const dl = lateralSweep(bars.drag);
-        el("tbSweep").textContent = tb.toFixed(3) + '"';
-        el("dlSweep").textContent = dl.toFixed(3) + '"';
-        const mm = Math.abs(tb - dl);
+        const tb = lateralShift(bars.track);
+        const dl = lateralShift(bars.drag);
+        let tbLo = 0, tbHi = 0, dlLo = 0, dlHi = 0, maxGap = 0;
+        for (let i = 0; i < tb.length; i++) {
+          if (tb[i] !== null) { tbLo = Math.min(tbLo, tb[i]); tbHi = Math.max(tbHi, tb[i]); }
+          if (dl[i] !== null) { dlLo = Math.min(dlLo, dl[i]); dlHi = Math.max(dlHi, dl[i]); }
+          if (tb[i] !== null && dl[i] !== null) maxGap = Math.max(maxGap, Math.abs(tb[i] - dl[i]));
+        }
+        el("tbSweep").textContent = ((tbHi - tbLo) / PPI).toFixed(3) + '"';
+        el("dlSweep").textContent = ((dlHi - dlLo) / PPI).toFixed(3) + '"';
+        const mm = maxGap / PPI;
         el("mismatch").textContent = mm.toFixed(3) + '"';
         const v = el("verdict");
-        if (mm < 0.05) { v.textContent = "Excellent — arcs track closely, minimal bump steer."; v.className = "verdict good"; }
-        else if (mm < 0.15) { v.textContent = "Good — small amount of bump steer."; v.className = "verdict warn"; }
-        else { v.textContent = "Noticeable mismatch — expect bump steer. Try matching length & angle."; v.className = "verdict bad"; }
+        if (mm < 0.05) { v.textContent = "Excellent: the two ends move together, so very little bump steer."; v.className = "verdict good"; }
+        else if (mm < 0.15) { v.textContent = "Good: only a small amount of bump steer."; v.className = "verdict warn"; }
+        else { v.textContent = "Noticeable mismatch: expect bump steer. Try matching length and angle."; v.className = "verdict bad"; }
       }
 
       /* ---------- inputs ---------- */
